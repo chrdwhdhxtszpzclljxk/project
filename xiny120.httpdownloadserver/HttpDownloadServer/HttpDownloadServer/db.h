@@ -56,6 +56,7 @@ public:
 protected:
 	db();
 	~db();
+	bool testopen();
 	bool open();
 	void close();
 private:

@@ -2,6 +2,7 @@
 #include <sstream>
 #include <algorithm>
 #include <iomanip>
+
 #include "db.h"
 #include "output.h"
 
@@ -26,7 +27,10 @@ writebuf::~writebuf(){ delete [] buf[0].buf;}
 
 bool filetrans::open(const std::string& fn){
 	if (fp != 0) fclose(fp); path = fn;
-	if ((fp = fopen(fn.c_str(), "rb")) == 0) return false;
+	if ((fp = fopen(fn.c_str(), "rb")) == 0){
+		otprint("%d",errno);
+		return false;
+	}
 	if (fp != 0){ fseek(fp, 0, SEEK_END); filesize = ftell(fp); fseek(fp, 0, SEEK_SET); }
 	end = -1; readed = 0;
 	return true;
@@ -53,33 +57,41 @@ int32_t filetrans::read(char* buf, const int32_t& _len){
 
 int32_t filetrans::getsize(){ return filesize;}
 
+listcc cc::ccdels;
 mapcc cc::cconlines;
+std::atomic<uint64_t> cc::__mccid = 0;
 std::recursive_mutex cc::ccmutex;
 cc::cc(SOCKET socket, iocpbase* b) : msocket(socket), netbase(b), mios(1), mbuflen(2048), mbuflenw(1024 * 32), mclosetime(-1),
 mftopen(false), mbuf(0), mbufw(0), mtouchclose(false), mtotal(0), mtotalreset(0), mspeedLimit(1024 * 100), mspeedlimit(false),
-haverequest(false), cr(false), crlf(false), mfirstAct(time(NULL)), mlastAct(mfirstAct + 1), mlastTick(0), mioSize(0){
-	cclock lock(ccmutex); cconlines[msocket] = this; 
+haverequest(false), cr(false), crlf(false), mfirstAct(time(NULL)), mlastAct(mfirstAct + 1), mlastTick(0), mioSize(0),mccid(__mccid++){
 }
 cc::~cc(){ 
 	if (mspeedlimit) speedlimit::me()->ccgone(muserid);
-	{cclock lock(ccmutex); cconlines.erase(msocket); }
 	closesocket(msocket);
 	netbase->notifydisconnection(this);
+	
 	if (mbuf != 0) delete[] mbuf;
 	if (mbufw != 0) delete[] mbufw;
 };
 
-bool cc::init(){ mbuf = new char[mbuflen]; mbufw = new char[mbuflenw]; return true;}
-int32_t cc::dec(){ if (--mios <= 0){ delete this; return 0; } return mios;}
+bool cc::init(){ 
+	mbuf = new char[mbuflen]; mbufw = new char[mbuflenw]; 
+	cclock lock(ccmutex); cconlines[mccid] = this; 
+	return true;
+}
+int32_t cc::dec(){ 
+	if (--mios <= 0){ 
+		{cclock lock(ccmutex); ccdels.push_back(this); }
+		return 0; 
+	} 
+	return mios;
+}
 void cc::touchclose(iocpbase* psvr){ mtouchclose = true; psvr->send("", 0, this);}
 
-inline void cc::close() { 
-	//printf("关闭文件\r\n"); 
-	if (mclosetime <= 0){
-		if ((time(NULL) - mlastAct) > 60) shutdown(msocket, 2);
-	} 
-	if ((time(NULL) - mclosetime) > 10)
-		shutdown(msocket, 2);//closesocket(msocket);
+inline bool cc::close() { 
+	if (mclosetime <= 0){ if ((time(NULL) - mlastAct) > 60) { shutdown(msocket, 2); return true; } }
+	if ((time(NULL) - mclosetime) > 10) { shutdown(msocket, 2); return true; }
+	return false;
 };
 
 void cc::requestclear(){
@@ -190,6 +202,7 @@ inline bool cc::filetrans_push(iocpbase* psvr){
 	if (!ret){
 		sprintf(buf, "HTTP/1.0 403 Forbidden\r\n"
 			"Content-Type:text/plain\r\n"
+			"Content-Length:10\r\n"
 			"Server:httpdownloadserver\r\n"
 			"Connection:close\r\n\r\nerror:403\r\n\r\n");
 		psvr->send(buf, strlen(buf), this);
@@ -216,6 +229,26 @@ void iocpbase::threadfiletrans(){
 	mapcc::iterator iter; int64_t last = 0, cur = 0, cccount = 0, speedmore = 0; int32_t out = 0;
 	while (!mshutdown){
 		{ cclock lock(cc::ccmutex); cccount = cc::cconlines.size(); }
+		{
+			cclock lock(cc::ccmutex);
+			if (cc::ccdels.size() > 0){
+				listcc::iterator it1;
+				for (listcc::iterator it = cc::ccdels.begin(); it != cc::ccdels.end(); it++){
+					cc* obj = (*it);
+					obj->mftopen = false;
+					if (obj->close()){
+						cc::cconlines.erase((*it)->ccid()); delete obj;
+						it1 = it; it1++;
+						cc::ccdels.erase(it);
+						if (it1 == cc::ccdels.end()) break;
+						it = it1;
+						//printf("close??\r\n");
+					}
+				}
+				//cc::ccdels.clear();
+			}
+		}
+
 		if (cccount <= 0) { SleepEx(100, TRUE); continue; } // 在线人数为0，线程休息。
 		cur = GetTickCount();
 		if ((cur - last) >= 100){ // 距离上次不足100，跳过。
@@ -224,7 +257,7 @@ void iocpbase::threadfiletrans(){
 				if (!iter->second->mftopen){ iter->second->close(); continue; }
 				int64_t speed = speedlimit::me()->getspeed(iter->second->muserid) / 10;
 				int64_t speeded = 0;
-
+				//Sleep(1);
 				if (iter->second->getios() < 10){
 					while (speed > 0 && (iter->second->getios() < 5)){
 						out = iter->second->filetrans_do(speed, this);
@@ -244,7 +277,9 @@ void iocpbase::threadfiletrans(){
 			}
 			last = cur;
 		}
-		if (speedmore >= 1024 * 1024 * 3 / 2){ speedmore = 1024 * 1024 * 2 / 3; Sleep(50); }
+		if (speedmore >= 1024 * 1024 * 3 / 2){ speedmore = 1024 * 1024 * 2 / 3; Sleep(10); }
+
+
 		Sleep(1);
 	}
 }
@@ -261,6 +296,35 @@ iocpbase::iocpbase() : msocketInit(false){
 }
 
 iocpbase::~iocpbase(){ if (msocketInit) WSACleanup();}
+
+int32_t iocpbase::closesocket(cc* pcc, bool bG){
+	int32_t ret = 0, dwError = 0;
+	if (bG && mDisConnectEx != NULL){
+		if (pcc->inc() > 0){
+			disconnectexbuf*  pOverlappedBuffer = new disconnectexbuf();
+			BOOL bRet = mDisConnectEx(pcc->msocket, pOverlappedBuffer, 0, 0);
+			if (bRet || ((dwError = WSAGetLastError()) == ERROR_IO_PENDING)){
+				bRet = TRUE;
+				//_tprintf(_T("m_pDisConnectEx：%d %d\r\n"),dwError,bRet);
+				//_tprintf(_T("m_pDisConnectEx：%d PENDING：%d OK!\r\n"), mp->m_Socket, mp->m_nNumberOfPendlingIO);
+				return true;
+			}else{
+				//_tprintf(_T("m_pDisConnectEx：%d PENDING：%d FAIL!\r\n"), mp->m_Socket, mp->m_nNumberOfPendlingIO);
+			}
+			//printf("\nCloseSocket\n");
+			pcc->dec();
+			release(pOverlappedBuffer);
+		}
+	}
+	else{
+		if (pcc->msocket != INVALID_SOCKET){ ret = ::closesocket(pcc->msocket); pcc->msocket = INVALID_SOCKET; }
+		else{
+			//_tprintf(_T("\r\n\r\nsocket关闭了。但是没有排除出列表？ %s \t %d\r\n"),mp->m_ci.m_szUserName,mp->m_Socket);
+		}
+		//_tprintf(_T("\n不太可能的错误吧？socket关闭了。但是没有排除出列表？ %s CCID：%I64u \t PENDING：%d\r\n"),mp->m_ci.m_tcUserName,mp->m_u64CCID,mp->m_nNumberOfPendlingIO);
+	}
+	return ret;
+}
 
 void iocpbase::threadio(){
 	BOOL bError = FALSE, bIORet = FALSE; DWORD dwIoSize = 0, dwIOError = 0;
@@ -335,7 +399,7 @@ void iocpbase::threadlistener(){
 						AssociateIncomingClientWithContext(clientSocket, sa, iLen);
 						p = inet_ntoa(sa);
 						bSuccessed = TRUE;
-					}else closesocket(clientSocket);
+					}else ::closesocket(clientSocket);
 				}
 			}
 		}
@@ -349,7 +413,7 @@ bool iocpbase::AssociateIncomingClientWithContext(SOCKET clientSocket, in_addr& 
 	if (mcurconnections >= mmaxconnections){// Close connecttion if we have reached the maximum nr of connections... 
 		LINGER li; li.l_onoff = 1; li.l_linger = 0;
 		setsockopt(clientSocket, SOL_SOCKET, SO_LINGER, (char *)&li, sizeof(li));
-		closesocket(clientSocket); clientSocket = INVALID_SOCKET;
+		::closesocket(clientSocket); clientSocket = INVALID_SOCKET;
 		return false;
 	}
 	cc* pcc = new cc(clientSocket,this);
@@ -380,28 +444,37 @@ bool iocpbase::start(const int32_t& port){
 	mcpport = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0);
 	if (NULL != mcpport){ // 创建IO内核对象失败  
 		if (INVALID_SOCKET != (msocketListener = WSASocket(AF_INET, SOCK_STREAM, IPPROTO_IP, NULL, 0, WSA_FLAG_OVERLAPPED))){
-			if (WSA_INVALID_EVENT != (macceptEvent = WSACreateEvent())){ // Event for handling Network IO
-				// The listener is ONLY interested in FD_ACCEPT
-				// That is when a client connects to or IP/Port
-				// Request async notification
-				if (WSAEventSelect(msocketListener, macceptEvent, FD_ACCEPT) == 0){
-					SOCKADDR_IN		saServer;
-					saServer.sin_port = htons(mport);// Listen on our designated Port#
-					saServer.sin_family = AF_INET;// Fill in the rest of the address structure
-					saServer.sin_addr.s_addr = INADDR_ANY;
-					if ((err = bind(msocketListener, (LPSOCKADDR)&saServer, sizeof(struct sockaddr))) != SOCKET_ERROR){// bind our name to the socket
-						if (listen(msocketListener, 5) != SOCKET_ERROR){// Set the socket to listen
-							maccept = true;
-							mthreadlistener = std::thread(&iocpbase::threadlistener, this);
-							for (int32_t i = 0; i < 8; i++) mthreadios.push_back(std::thread(&iocpbase::threadio, this));
-							mthreadfiletrans = std::thread(&iocpbase::threadfiletrans, this);
-							return true;
-						}else{ err = WSAGetLastError(); }
-					}else{ err = WSAGetLastError(); }
-				}else{ err = WSAGetLastError(); }
-				WSACloseEvent(macceptEvent);
+			GUID GuidAcceptEx = WSAID_DISCONNECTEX; DWORD dwBytes = 0;
+			// Get AccpetEx Function
+			if (WSAIoctl(msocketListener, SIO_GET_EXTENSION_FUNCTION_POINTER, &GuidAcceptEx, sizeof(GuidAcceptEx),
+				&mDisConnectEx, sizeof(mDisConnectEx), &dwBytes, NULL, NULL) == 0){
+
+				if (WSA_INVALID_EVENT != (macceptEvent = WSACreateEvent())){ // Event for handling Network IO
+					// The listener is ONLY interested in FD_ACCEPT
+					// That is when a client connects to or IP/Port
+					// Request async notification
+					if (WSAEventSelect(msocketListener, macceptEvent, FD_ACCEPT) == 0){
+						SOCKADDR_IN		saServer;
+						saServer.sin_port = htons(mport);// Listen on our designated Port#
+						saServer.sin_family = AF_INET;// Fill in the rest of the address structure
+						saServer.sin_addr.s_addr = INADDR_ANY;
+						if ((err = bind(msocketListener, (LPSOCKADDR)&saServer, sizeof(struct sockaddr))) != SOCKET_ERROR){// bind our name to the socket
+							if (listen(msocketListener, 500) != SOCKET_ERROR){// Set the socket to listen
+								maccept = true;
+								mthreadlistener = std::thread(&iocpbase::threadlistener, this);
+								for (int32_t i = 0; i < 8; i++) mthreadios.push_back(std::thread(&iocpbase::threadio, this));
+								mthreadfiletrans = std::thread(&iocpbase::threadfiletrans, this);
+								return true;
+							}
+							else{ err = WSAGetLastError(); }
+						}
+						else{ err = WSAGetLastError(); }
+					}
+					else{ err = WSAGetLastError(); }
+					WSACloseEvent(macceptEvent);
+				}
 			}
-			closesocket(msocketListener);
+			::closesocket(msocketListener);
 		}
 	}
 	return false;

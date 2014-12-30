@@ -13,6 +13,8 @@
 
 #include <WinSock2.h>
 #pragma comment( lib, "ws2_32.lib" )
+#include <mswsock.h>
+#pragma comment(lib,"Mswsock.lib")
 
 NS_XINY120_BEGIN
 class cc;
@@ -24,7 +26,7 @@ const std::string VER = "VER";
 const std::string RANGE = "RANGE";
 const std::string BYTES = "BYTES";
 
-enum optype{ init, read, write, write2all,close,};
+enum optype{ acceptex, init, read, write, write2all, close, disconnectex};
 class basebuf : public OVERLAPPED { 
 public:
 	basebuf(const optype& _op):op(_op){ ZeroMemory(this, sizeof(OVERLAPPED)); };
@@ -33,7 +35,14 @@ public:
 protected:
 	WSABUF buf[2]; optype op; 
 };
+class acceptexbuf : public basebuf{
+public:
+	acceptexbuf(SOCKET s):basebuf(acceptex),msocket(s){};
+private:
+	SOCKET msocket;
+};
 class initbuf : public basebuf{ public: initbuf::initbuf() : basebuf(init){}; };
+class disconnectexbuf : public basebuf{ public: disconnectexbuf() : basebuf(disconnectex){}; };
 class closebuf : public basebuf{ public: closebuf::closebuf() :basebuf(close){}; };
 class readbuf : public basebuf{ 
 public: 
@@ -70,6 +79,7 @@ private:
 typedef std::lock_guard<std::recursive_mutex> cclock;
 typedef std::map<int64_t, int64_t> maplimit;
 typedef std::map<uint64_t, cc*> mapcc;
+typedef std::list<cc*> listcc;
 class cc{ // 每连接一个socket只下载一个文件然后断开。
 public:
 	SOCKET msocket;
@@ -77,9 +87,10 @@ public:
 	~cc();
 	int32_t inc(){ if(mios > 0) mios++; return mios; };
 	int32_t dec();
+	inline uint64_t ccid(){ return mccid; };
 	void touchclose(iocpbase*);
 	inline void setclose(){ mclosetime = time(NULL); };
-	inline void close();// { printf("关闭文件\r\n"); if (mclosetime <= 0) return; if ((time(NULL) - mclosetime) > 10) closesocket(msocket); };
+	inline bool close();
 	inline bool pushchar(const char& ch){ lastline.push_back(ch); return true; };
 	inline bool lastlineempty(){ return lastline.empty(); };
 	inline void lastlineclear(){ lastline.clear(); };
@@ -107,12 +118,15 @@ public:
 	char* mbufw; int32_t mbuflenw;// , mbuflenw1;
 	bool haverequest,cr,crlf;
 	static mapcc cconlines;
+	static listcc ccdels;
 	static std::recursive_mutex ccmutex;
 	DWORD merrno;
 	std::atomic<bool> mftopen,mtouchclose,mspeedlimit;
 private:
 	iocpbase* netbase;
 	std::atomic<int32_t> mios;
+	static std::atomic<uint64_t> __mccid;
+	std::atomic<uint64_t> mccid;
 
 	std::string lastline;
 	std::map<std::string, std::string> request,varmap;
@@ -133,7 +147,7 @@ private:
 	speedlimit(){ speedmore = 0; };
 	std::recursive_mutex mmutex;
 	maplimit mlimit;
-	const int64_t mlimitmax = 1024 * 1024 * 8 / 8;
+	const int64_t mlimitmax = 1024 * 1024 * 8 / 8 * 50;
 };
 
 
@@ -163,7 +177,9 @@ private:
 	bool iocpbase::onwrite(cc *pcc, const int32_t& dwIoSize, const LPOVERLAPPED pOverlapBuff);
 	bool iocpbase::aread(cc* pContext);
 	void release(LPOVERLAPPED);
+	int32_t closesocket(cc *mp, bool bG = false);
 
+	LPFN_DISCONNECTEX mDisConnectEx;
 	SOCKET msocketListener;
 	HANDLE mcpport, macceptEvent;
 	bool msocketInit;

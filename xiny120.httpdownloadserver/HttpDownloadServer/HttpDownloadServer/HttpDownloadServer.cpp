@@ -11,6 +11,7 @@ xiny120::IOCPServer svr;
 std::map<std::string, std::string> cmdmap;
 const static char* basepath = "d:\\backup\\";
 int _tmain(int argc, _TCHAR* argv[]){
+	_setmaxstdio(2048);
 	char input[1024] = { 0 }; bool run = true; std::string cmd,par; int32_t len,i,port = 80;
 	printf("正准备数据库连接...\r\n");
 	FILE* fp = fopen("D:\\DEVTOOLS\\project\\sql.txt", "rb");

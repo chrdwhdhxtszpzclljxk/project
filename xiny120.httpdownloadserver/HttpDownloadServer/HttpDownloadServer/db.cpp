@@ -43,6 +43,11 @@ void db::close(){
 	CoUninitialize();
 }
 
+bool db::testopen(){
+	_lockg lock(mt);
+	return true;
+}
+
 tm db::localtime(const int64_t& _now){
 	int64_t now = _now;	if (now < 0 || now >= 0x793406fffi64) now = 0;
 	return *::_localtime64(&now);
@@ -58,12 +63,17 @@ std::string db::getfile(const std::string& key, int32_t& userid){
 			cmd->ActiveConnection = con;								// 绑定连接
 			_lockg lock(mt);
 			rs = cmd->Execute(NULL, NULL, adCmdStoredProc);				// 一定要用这种方式
-			if(!rs->adoEOF){
-				_bstr_t b = rs->GetCollect("filePath").operator _bstr_t();
-				ret = b;
-				userid = rs->GetCollect("userid").operator int();
+			try{
+				if (rs != NULL){
+					if (!(rs->BOF && rs->adoEOF)){
+						_bstr_t b = rs->GetCollect("filePath").operator _bstr_t();
+						ret = b;
+						userid = rs->GetCollect("userid").operator int();
+					}
+					rs->Close();
+				}
 			}
-			rs->Close();
+			catch (...){}
 		}
 		catch (_com_error e){
 			otprint("sql error: %d %s 0x%08x,%s %s", int32_t(e.WCode()),key.c_str(), int32_t(e.Error()), _bstr_t(e.ErrorMessage()).operator char *(), e.Description().operator char *());
