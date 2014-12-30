@@ -81,7 +81,10 @@
     <Text Include="ReadMe.txt" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="buffer.h" />
+    <ClInclude Include="clientcontext.h" />
     <ClInclude Include="db.h" />
+    <ClInclude Include="fileinfo.h" />
     <ClInclude Include="HDS_ns.h" />
     <ClInclude Include="IOCPBase.h" />
     <ClInclude Include="IOCPServer.h" />
@@ -90,7 +93,10 @@
     <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="buffer.cpp" />
+    <ClCompile Include="clientcontext.cpp" />
     <ClCompile Include="db.cpp" />
+    <ClCompile Include="fileinfo.cpp" />
     <ClCompile Include="HttpDownloadServer.cpp" />
     <ClCompile Include="IOCPBase.cpp" />
     <ClCompile Include="IOCPServer.cpp" />

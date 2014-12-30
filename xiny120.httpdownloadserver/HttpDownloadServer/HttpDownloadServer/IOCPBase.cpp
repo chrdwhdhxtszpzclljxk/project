@@ -17,219 +17,15 @@ speedlimit* speedlimit::me(){
 	return __speedlimit;
 }
 
-bool readbuf::prepare(cc* pcc){ buf[0].buf = pcc->mbuf; buf[0].len = pcc->mbuflen; return true;}
 
-writebuf::writebuf(const char* p, const int32_t& len) : basebuf(write){ 
-	try{ buf[0].len = len; buf[0].buf = new char[len]; memcpy(buf[0].buf, p, len);}catch (...){ assert(0);}
-}
 
-writebuf::~writebuf(){ delete [] buf[0].buf;}
-
-bool filetrans::open(const std::string& fn){
-	if (fp != 0) fclose(fp); path = fn;
-	if ((fp = fopen(fn.c_str(), "rb")) == 0){
-		otprint("%d",errno);
-		return false;
-	}
-	if (fp != 0){ fseek(fp, 0, SEEK_END); filesize = ftell(fp); fseek(fp, 0, SEEK_SET); }
-	end = -1; readed = 0;
-	return true;
-}
-
-void filetrans::close(){ if (fp != 0) fclose(fp); fp = 0; }
-int32_t filetrans::setend(const int32_t& _end){ end = _end; return end; }
-int32_t filetrans::seek(const int32_t& pos){ int32_t len; if (fp != 0){ len = fseek(fp, pos, SEEK_SET); readed += len; return len; } return -1; };
-int32_t filetrans::read(char* buf, const int32_t& _len){ 
-	int32_t len = _len; 
-	if (fp != 0){
-		if (end != -1){ // range 指定了结束标记。
-			if (readed >= end) return 0; // 已经读取的字节大于等于range指定的字节，停止读取。
-			if ((readed + len) > end){
-				len = end - readed;
-			}
-		}
-		len = fread(buf, 1, len, fp); 
-		readed += len; 
-		return len; 
-	} 
-	return 0; 
-}
-
-int32_t filetrans::getsize(){ return filesize;}
-
-listcc cc::ccdels;
-mapcc cc::cconlines;
-std::atomic<uint64_t> cc::__mccid = 0;
-std::recursive_mutex cc::ccmutex;
-cc::cc(SOCKET socket, iocpbase* b) : msocket(socket), netbase(b), mios(1), mbuflen(2048), mbuflenw(1024 * 32), mclosetime(-1),
-mftopen(false), mbuf(0), mbufw(0), mtouchclose(false), mtotal(0), mtotalreset(0), mspeedLimit(1024 * 100), mspeedlimit(false),
-haverequest(false), cr(false), crlf(false), mfirstAct(time(NULL)), mlastAct(mfirstAct + 1), mlastTick(0), mioSize(0),mccid(__mccid++){
-}
-cc::~cc(){ 
-	if (mspeedlimit) speedlimit::me()->ccgone(muserid);
-	closesocket(msocket);
-	netbase->notifydisconnection(this);
-	
-	if (mbuf != 0) delete[] mbuf;
-	if (mbufw != 0) delete[] mbufw;
-};
-
-bool cc::init(){ 
-	mbuf = new char[mbuflen]; mbufw = new char[mbuflenw]; 
-	cclock lock(ccmutex); cconlines[mccid] = this; 
-	return true;
-}
-int32_t cc::dec(){ 
-	if (--mios <= 0){ 
-		{cclock lock(ccmutex); ccdels.push_back(this); }
-		return 0; 
-	} 
-	return mios;
-}
-void cc::touchclose(iocpbase* psvr){ mtouchclose = true; psvr->send("", 0, this);}
-
-inline bool cc::close() { 
-	if (mclosetime <= 0){ if ((time(NULL) - mlastAct) > 60) { shutdown(msocket, 2); return true; } }
-	if ((time(NULL) - mclosetime) > 10) { shutdown(msocket, 2); return true; }
-	return false;
-};
-
-void cc::requestclear(){
-	std::map<std::string, std::string>::iterator iter;
-	for (iter = request.begin(); iter != request.end(); iter++){ iter->second.clear();}
-	lastlineclear();
-	haverequest = false;
-}
-
-inline bool cc::get(){
-	std::map<std::string, std::string>::iterator iter = request.find(GET); 
-	if (iter != request.end()) return true;
-	return false;
-}
-
-std::string cc::varget(const std::string& key){
-	return varmap[key];
-}
-
-inline bool cc::prepareget(){
-	int32_t i = 0, len = 0; std::stringstream ss(lastline); std::string txt, var, val;
-	ss >> txt; std::transform(txt.begin(), txt.end(), txt.begin(), ::toupper);
-	if (txt != GET) return false;
-	request[GET] = GET;
-	ss >> txt; txt = HttpUtility::URLDecode(txt); if (!txt.empty()) request[URI] = txt; len = txt.length();
-	for (i = 0; i < len; i++){
-		if (txt[i] == '='){	var = val; val.clear();	} 
-		else if (txt[i] == '&') { varmap[var] = val; var.clear(); val.clear(); } 
-		else if (txt[i] == '?') { request[GET] = val; val.clear(); var.clear(); }
-		else val.push_back(txt[i]);
-	}
-	if ((!var.empty()) && (!val.empty())) varmap[var] = val;
-	ss >> txt; if (!txt.empty()) request[VER] = txt;
-	return true;
-}
-
-inline bool cc::preparereq(){
-	int32_t i = 0, len = 0; std::string txt = lastline, var, val; len = txt.length();
-	for (i = 0; i < len; i++){
-		if (txt[i] == ':'){ var = val; val.clear(); }
-		else val.push_back(txt[i]);
-	}
-	std::transform(var.begin(), var.end(), var.begin(), ::toupper);
-	if ((!var.empty()) && (!val.empty()) && var == RANGE) request[var] = val;
-	return true;
-}
-
-inline bool cc::filetrans_push(iocpbase* psvr){
-	mft.close(); std::string file; char buf[1024] = { 0 }; char filename[1024] = { 0 }; char ext[256] = { 0 }; const char* basepath = getbasepath();
-	int32_t userid = 0, i = 0, len = 0, cl,s,e; bool ret = false; mftopen = false; std::string txt, var, val,resstr = "HTTP/1.1 200 OK" ; std::stringstream ss;
-	char cr[1024] = { 0 };
-	std::string key = varget("key"); if (!key.empty()){
-		file = db::me()->getfile(key, userid); if (!(file.empty() || userid == 0)){
-			muserid = userid; _splitpath(file.c_str(), NULL, NULL, filename, ext);
-			if (!mft.open(file)){
-				otprint("[%d][%s]文件不存在(%s)\r\n",muserid,key.c_str(), file.c_str()); return false;
-			}
-			else {
-				cl = mft.getsize();
-				if (!request[RANGE].empty()){ // 启用了range，现在要进行分析。
-					txt = request[RANGE]; len = txt.length();
-					for (i = 0; i < len; i++){
-						if (txt[i] == '='){ var = val; val.clear(); }
-						else val.push_back(txt[i]);
-					}
-					std::transform(var.begin(), var.end(), var.begin(), ::toupper);
-					var = iocpbase::trim(var);
-					if (var == BYTES){
-						s = e = 0;
-						txt = val; val.clear(); len = txt.length();
-						for (i = 0; i < len; i++){
-							if (txt[i] == '-'){ var = val; val.clear(); }
-							else val.push_back(txt[i]);
-						}
-						if (!var.empty()){
-							ss.clear(); ss << var; ss >> s; if (mft.seek(s) == -1) return false;
-						}
-						if (!val.empty()){
-							ss.clear(); ss << val; ss >> e; mft.setend(e);
-						}
-						resstr = "HTTP/1.1 206 Partial Content";
-						sprintf(cr, "Content-Range:bytes %d-%d/%d\r\n", s, e, cl);
-						cl = e - s + 1;
-					}
-				}
-				sprintf(buf, "%s\r\n" //http://blog.csdn.net/pud_zha/article/details/7924929
-					"Content-Length:%d\r\n"
-					"Content-Type:application/octet-stream\r\n"
-					"Accept-Ranges:bytes\r\n"
-					"%s"
-					"Server:httpdownloadserver\r\n"
-					"Connection:close\r\n"
-					"Content-Disposition:attachment;filename=%s%s\r\n\r\n", resstr.c_str(),cl, cr, filename, ext);
-				mspeedlimit = true;
-				speedlimit::me()->cccame(muserid);
-				psvr->send(buf, strlen(buf), this);
-				mftopen = true;
-				mlastTick = GetTickCount();
-				//otprint("[%d][%s]开始下载：%s\r\n",int32_t(muserid),key.c_str(),file.c_str());
-				return true;
-			}
-		}
-		else{
-			ret = false;
-		}
-	}
-
-	if (!ret){
-		sprintf(buf, "HTTP/1.0 403 Forbidden\r\n"
-			"Content-Type:text/plain\r\n"
-			"Content-Length:10\r\n"
-			"Server:httpdownloadserver\r\n"
-			"Connection:close\r\n\r\nerror:403\r\n\r\n");
-		psvr->send(buf, strlen(buf), this);
-		touchclose(psvr);
-	}
-
-	return false;
-}
-
-inline int32_t cc::filetrans_do(const int32_t& _count,iocpbase* psvr){
-	if (!mftopen){ /*otprint("filetrans_do 错误！文件没打开！\r\n");*/return true; }
-	int32_t count = _count; if (count > mbuflenw) count = mbuflenw;
-	count = mft.read(mbufw, count);
-	if (count > 0){ psvr->send(mbufw, count, this); mioSize += count; mlastAct = time(NULL); }
-	else if(count == 0){ // 发送全部文件完成！发送一个优雅关闭通知。并从发送列表中清除。
-		mftopen = false; mft.close();
-		psvr->send("\r\n", 2, this);
-		touchclose(psvr);
-	};
-	return count;
-}
 
 void iocpbase::threadfiletrans(){
 	mapcc::iterator iter; int64_t last = 0, cur = 0, cccount = 0, speedmore = 0; int32_t out = 0;
 	while (!mshutdown){
 		{ cclock lock(cc::ccmutex); cccount = cc::cconlines.size(); }
 		{
+			/*
 			cclock lock(cc::ccmutex);
 			if (cc::ccdels.size() > 0){
 				listcc::iterator it1;
@@ -247,6 +43,7 @@ void iocpbase::threadfiletrans(){
 				}
 				//cc::ccdels.clear();
 			}
+			*/
 		}
 
 		if (cccount <= 0) { SleepEx(100, TRUE); continue; } // 在线人数为0，线程休息。
@@ -316,13 +113,11 @@ int32_t iocpbase::closesocket(cc* pcc, bool bG){
 			release(pOverlappedBuffer);
 		}
 	}
+	if (pcc->msocket != INVALID_SOCKET){ ret = ::closesocket(pcc->msocket); pcc->msocket = INVALID_SOCKET; }
 	else{
-		if (pcc->msocket != INVALID_SOCKET){ ret = ::closesocket(pcc->msocket); pcc->msocket = INVALID_SOCKET; }
-		else{
-			//_tprintf(_T("\r\n\r\nsocket关闭了。但是没有排除出列表？ %s \t %d\r\n"),mp->m_ci.m_szUserName,mp->m_Socket);
-		}
-		//_tprintf(_T("\n不太可能的错误吧？socket关闭了。但是没有排除出列表？ %s CCID：%I64u \t PENDING：%d\r\n"),mp->m_ci.m_tcUserName,mp->m_u64CCID,mp->m_nNumberOfPendlingIO);
+		//_tprintf(_T("\r\n\r\nsocket关闭了。但是没有排除出列表？ %s \t %d\r\n"),mp->m_ci.m_szUserName,mp->m_Socket);
 	}
+		//_tprintf(_T("\n不太可能的错误吧？socket关闭了。但是没有排除出列表？ %s CCID：%I64u \t PENDING：%d\r\n"),mp->m_ci.m_tcUserName,mp->m_u64CCID,mp->m_nNumberOfPendlingIO);
 	return ret;
 }
 
@@ -498,13 +293,14 @@ void iocpbase::release(LPOVERLAPPED pbuf){
 }
 
 bool iocpbase::ProcessIOMessage(LPOVERLAPPED pBuff, cc *pContext, uint32_t dwSize){
-	if (pBuff == NULL) return FALSE;
-	bool bRet = FALSE; int32_t iError = 0; basebuf* pbase = (basebuf *)pBuff;
+	if (pBuff == NULL) return false;
+	bool bRet = false; int32_t iError = 0; basebuf* pbase = (basebuf *)pBuff;
 	switch (pbase->getop()){
 	case init: bRet = oninit(pContext, dwSize, pBuff); iError = 1;  break;
 	case read: bRet = onread(pContext, dwSize, pBuff); iError = 2;	break;
 	case write2all: bRet = onwrite2all(pContext, dwSize, pBuff); iError = 3; break;
 	case write:	bRet = onwrite(pContext, dwSize, pBuff); iError = 4; break;
+	case disconnectex: bRet = ondisconnectex(pContext, dwSize, pBuff); iError = 4; break;
 	default: pContext->merrno = 999; iError = 99; break;
 	}
 	return bRet;
@@ -513,6 +309,12 @@ bool iocpbase::ProcessIOMessage(LPOVERLAPPED pBuff, cc *pContext, uint32_t dwSiz
 bool iocpbase::oninit(cc *pContext, const int32_t& dwIoSize, const LPOVERLAPPED pOverlapBuff){
 	if(notifyconnection(pContext)) return aread(pContext);
 	return false;
+}
+
+bool iocpbase::ondisconnectex(cc *pcc, const int32_t& dwIoSize, const LPOVERLAPPED pOverlapBuff){
+	closesocket(pcc);
+	delete pcc;
+	return true;
 }
 
 // The read is not made directly to distribute CPU power fairly between the connections.

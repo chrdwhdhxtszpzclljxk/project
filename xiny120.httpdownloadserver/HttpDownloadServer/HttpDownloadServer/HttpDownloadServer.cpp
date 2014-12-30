@@ -14,7 +14,7 @@ int _tmain(int argc, _TCHAR* argv[]){
 	_setmaxstdio(2048);
 	char input[1024] = { 0 }; bool run = true; std::string cmd,par; int32_t len,i,port = 80;
 	printf("正准备数据库连接...\r\n");
-	FILE* fp = fopen("D:\\DEVTOOLS\\project\\sql.txt", "rb");
+	FILE* fp = fopen("D:\\sql.txt", "rb");
 	if (fp != 0){
 		fread(input, 1, sizeof(input), fp);
 		fclose(fp);

@@ -15,6 +15,8 @@
 #pragma comment( lib, "ws2_32.lib" )
 #include <mswsock.h>
 #pragma comment(lib,"Mswsock.lib")
+#include "clientcontext.h"
+#include "buffer.h"
 
 NS_XINY120_BEGIN
 class cc;
@@ -26,113 +28,8 @@ const std::string VER = "VER";
 const std::string RANGE = "RANGE";
 const std::string BYTES = "BYTES";
 
-enum optype{ acceptex, init, read, write, write2all, close, disconnectex};
-class basebuf : public OVERLAPPED { 
-public:
-	basebuf(const optype& _op):op(_op){ ZeroMemory(this, sizeof(OVERLAPPED)); };
-	optype getop(){ return op; };
-	WSABUF *  getbuf(){	return (buf);	}
-protected:
-	WSABUF buf[2]; optype op; 
-};
-class acceptexbuf : public basebuf{
-public:
-	acceptexbuf(SOCKET s):basebuf(acceptex),msocket(s){};
-private:
-	SOCKET msocket;
-};
-class initbuf : public basebuf{ public: initbuf::initbuf() : basebuf(init){}; };
-class disconnectexbuf : public basebuf{ public: disconnectexbuf() : basebuf(disconnectex){}; };
-class closebuf : public basebuf{ public: closebuf::closebuf() :basebuf(close){}; };
-class readbuf : public basebuf{ 
-public: 
-	readbuf::readbuf() : basebuf(read){}; 
-	bool prepare(cc*); 
-};
-class writebuf : public basebuf{
-public: 
-	writebuf(const char* p, const int32_t& len); 
-	~writebuf();
-};
 
-class write2allbuf : public basebuf{ public: write2allbuf::write2allbuf() : basebuf(write2all){}; void dec(){}; };
 
-class filetrans{
-public:
-	filetrans() :fp(0), filesize(0), end(-1), readed(0){};
-	~filetrans(){ close(); }
-	bool open(const std::string&);
-	int32_t getsize();
-	int32_t read(char*,const int32_t&);
-	int32_t seek(const int32_t&);
-	int32_t setend(const int32_t&);
-	void close();
-	std::string getname(){ return path; };
-
-private:
-	FILE* fp;
-	int32_t end;
-	int32_t readed;
-	int32_t filesize;
-	std::string path;
-};
-typedef std::lock_guard<std::recursive_mutex> cclock;
-typedef std::map<int64_t, int64_t> maplimit;
-typedef std::map<uint64_t, cc*> mapcc;
-typedef std::list<cc*> listcc;
-class cc{ // 每连接一个socket只下载一个文件然后断开。
-public:
-	SOCKET msocket;
-	cc(SOCKET,iocpbase*);
-	~cc();
-	int32_t inc(){ if(mios > 0) mios++; return mios; };
-	int32_t dec();
-	inline uint64_t ccid(){ return mccid; };
-	void touchclose(iocpbase*);
-	inline void setclose(){ mclosetime = time(NULL); };
-	inline bool close();
-	inline bool pushchar(const char& ch){ lastline.push_back(ch); return true; };
-	inline bool lastlineempty(){ return lastline.empty(); };
-	inline void lastlineclear(){ lastline.clear(); };
-	inline const std::string& getlastline(){ return lastline; }
-	inline void requestclear();
-	inline bool get();
-	inline int32_t getios(){ return mios; };
-	std::string varget(const std::string&);
-	inline bool prepareget();
-	inline bool preparereq();
-	inline bool filetrans_push(iocpbase*);
-	inline int32_t filetrans_do(const int32_t& count,iocpbase*);
-	inline std::string getfile(){ return mft.getname(); };
-	int32_t getfilesize(){ return mft.getsize(); };
-	bool init();
-	static void speedreset(){
-		cclock lock(cc::ccmutex); mapcc::iterator iter;
-		for (iter = cc::cconlines.begin(); iter != cc::cconlines.end(); iter++){
-			iter->second->mlastTick = GetTickCount(); iter->second->mtotalreset = 0;
-		}
-	};
-public:
-	std::atomic<int64_t> mfirstAct, mlastAct, mioSize, mlastTick, mtotal,mtotalreset, mspeedLimit, muserid;
-	char* mbuf; int32_t mbuflen;
-	char* mbufw; int32_t mbuflenw;// , mbuflenw1;
-	bool haverequest,cr,crlf;
-	static mapcc cconlines;
-	static listcc ccdels;
-	static std::recursive_mutex ccmutex;
-	DWORD merrno;
-	std::atomic<bool> mftopen,mtouchclose,mspeedlimit;
-private:
-	iocpbase* netbase;
-	std::atomic<int32_t> mios;
-	static std::atomic<uint64_t> __mccid;
-	std::atomic<uint64_t> mccid;
-
-	std::string lastline;
-	std::map<std::string, std::string> request,varmap;
-	filetrans mft;
-	int64_t mclosetime;
-};
 
 class speedlimit{
 public:
@@ -164,6 +61,7 @@ public:
 	static std::string ltrim(std::string&);
 	static std::string rtrim(std::string&);
 	static std::string trim(std::string&);
+	int32_t closesocket(cc *mp, bool bG = false);
 
 private:
 	void threadlistener();
@@ -175,9 +73,9 @@ private:
 	bool iocpbase::onread(cc* pcc, const int32_t& dwIoSize, const LPOVERLAPPED lpOverlap);
 	bool iocpbase::onwrite2all(cc *pcc, const int32_t& dwIoSize, const LPOVERLAPPED pOverlapBuff);
 	bool iocpbase::onwrite(cc *pcc, const int32_t& dwIoSize, const LPOVERLAPPED pOverlapBuff);
+	bool iocpbase::ondisconnectex(cc *pcc, const int32_t& dwIoSize, const LPOVERLAPPED pOverlapBuff);
 	bool iocpbase::aread(cc* pContext);
 	void release(LPOVERLAPPED);
-	int32_t closesocket(cc *mp, bool bG = false);
 
 	LPFN_DISCONNECTEX mDisConnectEx;
 	SOCKET msocketListener;

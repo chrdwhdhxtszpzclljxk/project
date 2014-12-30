@@ -39,6 +39,15 @@
     <ClInclude Include="output.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="buffer.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="clientcontext.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="fileinfo.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
@@ -57,6 +66,15 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="output.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="buffer.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="clientcontext.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="fileinfo.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>
