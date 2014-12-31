@@ -15,12 +15,12 @@
 #pragma comment( lib, "ws2_32.lib" )
 #include <mswsock.h>
 #pragma comment(lib,"Mswsock.lib")
-#include "clientcontext.h"
+
 #include "buffer.h"
 
 NS_XINY120_BEGIN
 class cc;
-class iocpbase;
+//class iocpbase;
 
 const std::string GET = "GET";
 const std::string URI = "URI";
@@ -28,32 +28,33 @@ const std::string VER = "VER";
 const std::string RANGE = "RANGE";
 const std::string BYTES = "BYTES";
 
-
-
+typedef std::map<int64_t, int64_t> maplimit;
 
 class speedlimit{
 public:
-	static speedlimit* me();
-	void cccame(const int64_t& userid){ if (userid <= 0) return; {cclock lock(mmutex); mlimit[userid] += 1; } cc::speedreset(); };
-	void ccgone(const int64_t& userid){ if (userid <= 0) return; {cclock lock(mmutex); mlimit[userid] -= 1; if (mlimit[userid] <= 0) mlimit.erase(userid); }cc::speedreset(); };
+	DECLARE_SINGLETON_FUNC(speedlimit);
+	virtual bool init(){ return true; };
+	void cccame(const int64_t& userid);// { if (userid <= 0) return; {cclock lock(mmutex); mlimit[userid] += 1; } cc::speedreset(); };
+	void ccgone(const int64_t& userid);// { if (userid <= 0) return; {cclock lock(mmutex); mlimit[userid] -= 1; if (mlimit[userid] <= 0) mlimit.erase(userid); }cc::speedreset(); };
 	int64_t getcount(){ cclock lock(mmutex); return mlimit.size(); };
 	int64_t getcount(const int64_t& userid){ if (userid <= 0) return 0; cclock lock(mmutex); return mlimit[userid]; };
 	int64_t getspeed(const int64_t& userid){ if (userid <= 0) return 1; cclock lock(mmutex); return mlimitmax / max(mlimit.size(), 1) / max(mlimit[userid], 1); };
-	static std::atomic<int64_t> speedmore;
+	std::atomic<int64_t> speedmore;
 private:
 	speedlimit(){ speedmore = 0; };
 	std::recursive_mutex mmutex;
 	maplimit mlimit;
-	const int64_t mlimitmax = 1024 * 1024 * 8 / 8 * 50;
+	const int64_t mlimitmax = 1024 * 1024 * 8 / 8;
 };
 
 
 class iocpbase{
 public:
-	iocpbase();
-	virtual ~iocpbase();
+	DECLARE_SINGLETON_FUNC(iocpbase);
+	virtual bool init(){ return true; };
 	bool start(const int32_t& port);
-	bool iocpbase::send(const char* , const int32_t&, cc*);
+	bool send(const char* , const int32_t&, cc*);
+	bool file2iocp(HANDLE f,cc*);
 	void printonlines();
 
 	virtual bool notifyconnection(cc*){ return true; };
@@ -61,7 +62,12 @@ public:
 	static std::string ltrim(std::string&);
 	static std::string rtrim(std::string&);
 	static std::string trim(std::string&);
-	int32_t closesocket(cc *mp, bool bG = false);
+	
+	static LPFN_DISCONNECTEX mDisConnectEx;
+	static void release(LPOVERLAPPED);
+protected:
+	iocpbase();
+	virtual ~iocpbase();
 
 private:
 	void threadlistener();
@@ -75,9 +81,7 @@ private:
 	bool iocpbase::onwrite(cc *pcc, const int32_t& dwIoSize, const LPOVERLAPPED pOverlapBuff);
 	bool iocpbase::ondisconnectex(cc *pcc, const int32_t& dwIoSize, const LPOVERLAPPED pOverlapBuff);
 	bool iocpbase::aread(cc* pContext);
-	void release(LPOVERLAPPED);
 
-	LPFN_DISCONNECTEX mDisConnectEx;
 	SOCKET msocketListener;
 	HANDLE mcpport, macceptEvent;
 	bool msocketInit;

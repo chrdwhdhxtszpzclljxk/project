@@ -19,7 +19,7 @@ int _tmain(int argc, _TCHAR* argv[]){
 		fread(input, 1, sizeof(input), fp);
 		fclose(fp);
 	}else{
-		printf("打开数据库配置文件失败！\r\n"); return 0;
+		printf("打开数据库配置文件失败！\r\n"); getchar(); return 0;
 	}
 	printf("%s\r\n",input);
 	xiny120::db::setupdb(input);

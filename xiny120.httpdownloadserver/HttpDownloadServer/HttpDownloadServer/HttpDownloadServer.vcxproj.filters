@@ -71,10 +71,10 @@
     <ClCompile Include="buffer.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="clientcontext.cpp">
+    <ClCompile Include="fileinfo.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="fileinfo.cpp">
+    <ClCompile Include="clientcontext.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

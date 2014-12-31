@@ -70,10 +70,11 @@ int _tmain(int argc, _TCHAR* argv[]){
 	}
 
 	std::thread th[300];
+	threadfiletrans(200);
 
-	for (int i = 0; i < 300; i++){
-		th[i] = std::thread(threadfiletrans,i);
-	}
+	//for (int i = 0; i < 300; i++){
+	//	th[i] = std::thread(threadfiletrans,i);
+	//}
 
 	while (true){ getchar(); }
 

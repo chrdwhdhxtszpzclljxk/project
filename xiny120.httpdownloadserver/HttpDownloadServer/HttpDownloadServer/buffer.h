@@ -3,20 +3,14 @@
 #define _HDS_BUFFER_H
 #include "HDS_ns.h"
 
-#include <WinSock2.h>
-#pragma comment( lib, "ws2_32.lib" )
-#include <mswsock.h>
-#pragma comment(lib,"Mswsock.lib")
+#include <winsock2.h>
+
 
 NS_XINY120_BEGIN
-class cc;
-class iocpbase;
 
 class cc;
-class iocpbase;
 
-
-enum optype{ acceptex, init, read, write, write2all, close, disconnectex };
+enum optype{ acceptex, init, read, write, write2all, close, disconnectex, readfile };
 class basebuf : public OVERLAPPED {
 public:
 	basebuf(const optype& _op) :op(_op){ ZeroMemory(this, sizeof(OVERLAPPED)); };
@@ -47,6 +41,7 @@ public:
 
 class write2allbuf : public basebuf{ public: write2allbuf::write2allbuf() : basebuf(write2all){}; void dec(){}; };
 
+class readfilebuf : public basebuf{ public: readfilebuf() :basebuf(readfile){}; };
 
 NS_XINY120_END
 

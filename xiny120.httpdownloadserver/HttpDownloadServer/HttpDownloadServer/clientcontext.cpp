@@ -1,8 +1,8 @@
-#include "clientcontext.h"
 #include "IOCPBase.h"
 #include "db.h"
 #include "output.h"
 #include <sstream>
+#include "clientcontext.h"
 
 extern const char* getbasepath();
 
@@ -11,7 +11,7 @@ NS_XINY120_BEGIN
 mapcc cc::cconlines;
 std::atomic<uint64_t> cc::__mccid = 0;
 std::recursive_mutex cc::ccmutex;
-cc::cc(SOCKET socket, iocpbase* b) : msocket(socket), netbase(b), mios(1), mbuflen(2048), mbuflenw(1024 * 32), mclosetime(-1),
+cc::cc(SOCKET socket) : msocket(socket), mios(1), mbuflen(2048), mbuflenw(1024 * 32), mclosetime(-1),
 mftopen(false), mbuf(0), mbufw(0), mtouchclose(false), mtotal(0), mtotalreset(0), mspeedLimit(1024 * 100), mspeedlimit(false),
 haverequest(false), cr(false), crlf(false), mfirstAct(time(NULL)), mlastAct(mfirstAct + 1), mlastTick(0), mioSize(0), mccid(__mccid++){
 }
@@ -19,7 +19,7 @@ cc::~cc(){
 	if (mspeedlimit) speedlimit::me()->ccgone(muserid);
 	{cclock lock(ccmutex); cc::cconlines.erase(mccid); }
 	//closesocket(msocket);
-	netbase->notifydisconnection(this);
+	//netbase->notifydisconnection(this);
 
 	if (mbuf != 0) delete[] mbuf;
 	if (mbufw != 0) delete[] mbufw;
@@ -30,10 +30,18 @@ bool cc::init(){
 	cclock lock(ccmutex); cconlines[mccid] = this;
 	return true;
 }
+
+int32_t cc::inc(){ 
+	if (mios > 0) 
+		mios++; 
+	else otprint("inc fail.......................\r\n");
+	return mios; 
+};
+
 int32_t cc::dec(){
 	if (--mios <= 0){
-		netbase->closesocket(this, true);
-		//delete this;
+		//netbase->closesocket(this, true);
+		delete this;
 		//{cclock lock(ccmutex); ccdels.push_back(this); }
 		return 0;
 	}
@@ -42,10 +50,39 @@ int32_t cc::dec(){
 //void cc::touchclose(iocpbase* psvr){ mtouchclose = true; psvr->send("", 0, this);}
 
 bool cc::close() {
-	if (mclosetime <= 0){ if ((time(NULL) - mlastAct) > 60) { this->netbase->closesocket(this, true); return true; } }
-	else if ((time(NULL) - mclosetime) > 10) { this->netbase->closesocket(this, true); return true; }
+	if (mclosetime <= 0){ if ((time(NULL) - mlastAct) > 60) { closesocket(false); return true; } }
+	else if ((time(NULL) - mclosetime) > 10) { closesocket(false); return true; }
 	return false;
 };
+
+
+int32_t cc::closesocket( bool bG){
+	int32_t ret = 0, dwError = 0;
+	if (bG && iocpbase::mDisConnectEx != NULL){
+		if (inc() > 0){
+			disconnectexbuf*  pOverlappedBuffer = new disconnectexbuf();
+			BOOL bRet = iocpbase::mDisConnectEx(msocket, pOverlappedBuffer, 0, 0);
+			if (bRet || ((dwError = WSAGetLastError()) == ERROR_IO_PENDING)){
+				bRet = TRUE;
+				//_tprintf(_T("m_pDisConnectEx：%d %d\r\n"),dwError,bRet);
+				//_tprintf(_T("m_pDisConnectEx：%d PENDING：%d OK!\r\n"), mp->m_Socket, mp->m_nNumberOfPendlingIO);
+				return true;
+			}
+			else{
+				//_tprintf(_T("m_pDisConnectEx：%d PENDING：%d FAIL!\r\n"), mp->m_Socket, mp->m_nNumberOfPendlingIO);
+			}
+			//printf("\nCloseSocket\n");
+			dec();
+			iocpbase::release(pOverlappedBuffer);
+		}
+	}
+	if (msocket != INVALID_SOCKET){ ret = ::closesocket(msocket); msocket = INVALID_SOCKET; }
+	else{
+		//_tprintf(_T("\r\n\r\nsocket关闭了。但是没有排除出列表？ %s \t %d\r\n"),mp->m_ci.m_szUserName,mp->m_Socket);
+	}
+	//_tprintf(_T("\n不太可能的错误吧？socket关闭了。但是没有排除出列表？ %s CCID：%I64u \t PENDING：%d\r\n"),mp->m_ci.m_tcUserName,mp->m_u64CCID,mp->m_nNumberOfPendlingIO);
+	return ret;
+}
 
 void cc::requestclear(){
 	std::map<std::string, std::string>::iterator iter;
@@ -54,7 +91,7 @@ void cc::requestclear(){
 	haverequest = false;
 }
 
-inline bool cc::get(){
+bool cc::get(){
 	std::map<std::string, std::string>::iterator iter = request.find(GET);
 	if (iter != request.end()) return true;
 	return false;
@@ -64,7 +101,7 @@ std::string cc::varget(const std::string& key){
 	return varmap[key];
 }
 
-inline bool cc::prepareget(){
+bool cc::prepareget(){
 	int32_t i = 0, len = 0; std::stringstream ss(lastline); std::string txt, var, val;
 	ss >> txt; std::transform(txt.begin(), txt.end(), txt.begin(), ::toupper);
 	if (txt != GET) return false;
@@ -81,7 +118,7 @@ inline bool cc::prepareget(){
 	return true;
 }
 
-inline bool cc::preparereq(){
+bool cc::preparereq(){
 	int32_t i = 0, len = 0; std::string txt = lastline, var, val; len = txt.length();
 	for (i = 0; i < len; i++){
 		if (txt[i] == ':'){ var = val; val.clear(); }
@@ -92,14 +129,14 @@ inline bool cc::preparereq(){
 	return true;
 }
 
-inline bool cc::filetrans_push(iocpbase* psvr){
+bool cc::filetrans_push(){
 	mft.close(); std::string file; char buf[1024] = { 0 }; char filename[1024] = { 0 }; char ext[256] = { 0 }; const char* basepath = getbasepath();
 	int32_t userid = 0, i = 0, len = 0, cl, s, e; bool ret = false; mftopen = false; std::string txt, var, val, resstr = "HTTP/1.1 200 OK"; std::stringstream ss;
 	char cr[1024] = { 0 };
 	std::string key = varget("key"); if (!key.empty()){
 		file = db::me()->getfile(key, userid); if (!(file.empty() || userid == 0)){
 			muserid = userid; _splitpath(file.c_str(), NULL, NULL, filename, ext);
-			if (!mft.open(file)){
+			if (!mft.open(file,this)){
 				otprint("[%d][%s]文件不存在(%s)\r\n", muserid, key.c_str(), file.c_str()); return false;
 			}
 			else {
@@ -140,7 +177,7 @@ inline bool cc::filetrans_push(iocpbase* psvr){
 					"Content-Disposition:attachment;filename=%s%s\r\n\r\n", resstr.c_str(), cl, cr, filename, ext);
 				mspeedlimit = true;
 				speedlimit::me()->cccame(muserid);
-				psvr->send(buf, strlen(buf), this);
+				iocpbase::me()->send(buf, strlen(buf), this);
 				mftopen = true;
 				mlastTick = GetTickCount();
 				//otprint("[%d][%s]开始下载：%s\r\n",int32_t(muserid),key.c_str(),file.c_str());
@@ -158,24 +195,22 @@ inline bool cc::filetrans_push(iocpbase* psvr){
 			"Content-Length:10\r\n"
 			"Server:httpdownloadserver\r\n"
 			"Connection:close\r\n\r\nerror:403\r\n\r\n");
-		psvr->send(buf, strlen(buf), this);
-		psvr->closesocket(this, true);
-		//touchclose(psvr);
+		iocpbase::me()->send(buf, strlen(buf), this);
+		closesocket(true);
 	}
 
 	return false;
 }
 
-inline int32_t cc::filetrans_do(const int32_t& _count, iocpbase* psvr){
+int32_t cc::filetrans_do(const int32_t& _count){
 	if (!mftopen){ /*otprint("filetrans_do 错误！文件没打开！\r\n");*/return true; }
 	int32_t count = _count; if (count > mbuflenw) count = mbuflenw;
 	count = mft.read(mbufw, count);
-	if (count > 0){ psvr->send(mbufw, count, this); mioSize += count; mlastAct = time(NULL); }
+	if (count > 0){ iocpbase::me()->send(mbufw, count, this); mioSize += count; mlastAct = time(NULL); }
 	else if (count == 0){ // 发送全部文件完成！发送一个优雅关闭通知。并从发送列表中清除。
 		mftopen = false; mft.close();
-		psvr->send("\r\n", 2, this);
-		psvr->closesocket(this, true);
-		//touchclose(psvr);
+		//iocpbase::me()->send("\r\n", 2, this);
+		closesocket(true);
 	};
 	return count;
 }
