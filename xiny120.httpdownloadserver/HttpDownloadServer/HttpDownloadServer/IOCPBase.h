@@ -80,6 +80,7 @@ private:
 	bool iocpbase::onwrite2all(cc *pcc, const int32_t& dwIoSize, const LPOVERLAPPED pOverlapBuff);
 	bool iocpbase::onwrite(cc *pcc, const int32_t& dwIoSize, const LPOVERLAPPED pOverlapBuff);
 	bool iocpbase::ondisconnectex(cc *pcc, const int32_t& dwIoSize, const LPOVERLAPPED pOverlapBuff);
+	bool iocpbase::onreadfile(cc *pcc, const int32_t& dwIoSize, const LPOVERLAPPED pOverlapBuff);
 	bool iocpbase::aread(cc* pContext);
 
 	SOCKET msocketListener;

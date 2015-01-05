@@ -36,17 +36,18 @@ public:
 	~filetrans(){ close(); }
 	bool open(const std::string&, cc*);
 	int32_t getsize();
-	int32_t read(char*, const int32_t&);
+	int32_t read(char*, const int32_t&, cc*);
 	int32_t seek(const int32_t&);
 	int32_t setend(const int32_t&);
+	void send(cc*);
 	void close();
 	std::string getname(){ return path; };
 
 private:
 	HANDLE f;
-	int32_t end;
-	int32_t readed;
-	int32_t filesize;
+	int32_t end; // 客户端分段下载时指定的结尾。
+	int32_t readed; // 已经读取了多少。
+	int32_t filesize; // 总文件大小。
 	std::string path;
 };
 

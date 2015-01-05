@@ -115,7 +115,8 @@ bool iocpbase::ProcessIOMessage(LPOVERLAPPED pBuff, cc *pContext, uint32_t dwSiz
 	case optype::read: bRet = onread(pContext, dwSize, pBuff); iError = 2;	break;
 	case optype::write2all: bRet = onwrite2all(pContext, dwSize, pBuff); iError = 3; break;
 	case optype::write:	bRet = onwrite(pContext, dwSize, pBuff); iError = 4; break;
-	case optype::disconnectex: bRet = ondisconnectex(pContext, dwSize, pBuff); iError = 4; break;
+	case optype::disconnectex: bRet = ondisconnectex(pContext, dwSize, pBuff); iError = 5; break;
+	case optype::readfile: bRet = onreadfile(pContext, dwSize, pBuff); iError = 6; break;
 	default: pContext->merrno = 999; iError = 99; break;
 	}
 	return bRet;
@@ -129,6 +130,13 @@ bool iocpbase::oninit(cc *pContext, const int32_t& dwIoSize, const LPOVERLAPPED 
 bool iocpbase::ondisconnectex(cc *pcc, const int32_t& dwIoSize, const LPOVERLAPPED pOverlapBuff){
 	pcc->closesocket(false);
 	//delete pcc;
+	return true;
+}
+
+bool iocpbase::onreadfile(cc *pcc, const int32_t& dwIoSize, const LPOVERLAPPED pOverlapBuff){
+	//pcc->closesocket(false);
+	//delete pcc;
+	
 	return true;
 }
 
@@ -288,12 +296,12 @@ void iocpbase::threadio(){
 
 bool iocpbase::file2iocp(HANDLE f, cc* pcc){
 	if (f != INVALID_HANDLE_VALUE){
-		if (pcc->inc() > 0){
+		//if (pcc->inc() > 0){
 			if (CreateIoCompletionPort((HANDLE)f, mcpport, (ULONG_PTR)pcc, 0) == mcpport){
 				return true;
 			}
-			pcc->dec();
-		}
+			//pcc->dec();
+		//}
 	}
 	return false;
 }

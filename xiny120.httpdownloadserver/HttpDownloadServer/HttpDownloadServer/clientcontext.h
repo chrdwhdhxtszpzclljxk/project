@@ -54,7 +54,7 @@ public:
 public:
 	std::atomic<int64_t> mfirstAct, mlastAct, mioSize, mlastTick, mtotal, mtotalreset, mspeedLimit, muserid;
 	char* mbuf; int32_t mbuflen;
-	char* mbufw; int32_t mbuflenw;
+	//char* mbufw; int32_t mbuflenw;
 	bool haverequest, cr, crlf;
 	static mapcc cconlines;
 	static std::recursive_mutex ccmutex;

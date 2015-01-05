@@ -58,26 +58,29 @@ int32_t filetrans::setend(const int32_t& _end){ end = _end; return end; }
 int32_t filetrans::seek(const int32_t& pos){
 	int32_t len;
 	if (f != INVALID_HANDLE_VALUE){ 
-		len = ::SetFilePointer(f, pos, NULL, FILE_BEGIN); return len;
+		len = ::SetFilePointer(f, pos, NULL, FILE_BEGIN); readed += len; return len;
 	}
 	return -1; 
 };
-int32_t filetrans::read(char* buf, const int32_t& _len){
-	int32_t len = _len;
+int32_t filetrans::read(char* _buf, const int32_t& _len,cc* pcc){
+	int32_t len = _len; BOOL status = FALSE; DWORD er;
 	if (f != INVALID_HANDLE_VALUE){
 		if (end != -1){ // range 指定了结束标记。
 			if (readed >= end){ close(); return 0; } // 已经读取的字节大于等于range指定的字节，停止读取。
-			if ((readed + len) > end){
-				len = end - readed;
-			}
+			if ((readed + len) > end){ len = end - readed; }
 		}
 		//len = fread(buf, 1, len, fp);
 		DWORD lened = 0; readfilebuf* buf = new readfilebuf();
-		ReadFile(f, buf, len, &lened, buf);
-		readed += len;
-		return len;
+		if ((status = ReadFile(f, _buf, len, NULL, buf)) == TRUE ){ // 读取文件成功。直接发送。
+			send(pcc);
+			return true;
+		} else if ((er = GetLastError()) == ERROR_IO_PENDING) return true; // 异步处理中...
 	}
-	return 0;
+	return false;
+}
+
+void filetrans::send(cc* pcc){
+
 }
 
 int32_t filetrans::getsize(){ return filesize; }
