@@ -10,7 +10,8 @@ NS_XINY120_BEGIN
 
 class cc;
 
-enum optype{ acceptex, init, read, write, write2all, close, disconnectex, readfile };
+
+enum optype{ acceptex, init, read, write, write2all, close, disconnectex,/* readfile*/ };
 class basebuf : public OVERLAPPED {
 public:
 	basebuf(const optype& _op) :op(_op){ ZeroMemory(this, sizeof(OVERLAPPED)); };
@@ -41,7 +42,7 @@ public:
 
 class write2allbuf : public basebuf{ public: write2allbuf::write2allbuf() : basebuf(write2all){}; void dec(){}; };
 
-class readfilebuf : public basebuf{ public: readfilebuf() :basebuf(readfile){}; };
+//class readfilebuf : public basebuf{ public: readfilebuf(cc* pcc) : basebuf(readfile),mpcc(pcc){}; cc* mpcc; };
 
 NS_XINY120_END
 

@@ -12,7 +12,7 @@ mapcc cc::cconlines;
 std::atomic<uint64_t> cc::__mccid = 0;
 std::recursive_mutex cc::ccmutex;
 cc::cc(SOCKET socket) : msocket(socket), mios(1), mbuflen(2048), /*mbuflenw(1024 * 32),mbufw(0),*/ mclosetime(-1),
-mftopen(false), mbuf(0),  mtouchclose(false), mtotal(0), mtotalreset(0), mspeedLimit(1024 * 100), mspeedlimit(false),
+mftopen(false), mbuf(0), mtouchclose(false), mtotal(0), mtotalreset(0), mspeedLimit(1024 * 100), mspeedlimit(false), mft(this),
 haverequest(false), cr(false), crlf(false), mfirstAct(time(NULL)), mlastAct(mfirstAct + 1), mlastTick(0), mioSize(0), mccid(__mccid++){
 }
 cc::~cc(){
@@ -136,7 +136,7 @@ bool cc::filetrans_push(){
 	std::string key = varget("key"); if (!key.empty()){
 		file = db::me()->getfile(key, userid); if (!(file.empty() || userid == 0)){
 			muserid = userid; _splitpath(file.c_str(), NULL, NULL, filename, ext);
-			if (!mft.open(file,this)){
+			if (!mft.open(file)){
 				otprint("[%d][%s]文件不存在(%s)\r\n", muserid, key.c_str(), file.c_str()); return false;
 			}
 			else {
@@ -162,6 +162,7 @@ bool cc::filetrans_push(){
 						if (!val.empty()){
 							ss.clear(); ss << val; ss >> e; mft.setend(e);
 						}
+						else e = cl - 1;
 						resstr = "HTTP/1.1 206 Partial Content";
 						sprintf(cr, "Content-Range:bytes %d-%d/%d\r\n", s, e, cl);
 						cl = e - s + 1;
@@ -203,8 +204,8 @@ bool cc::filetrans_push(){
 }
 
 int32_t cc::filetrans_do(const int32_t& _count){
-	bool status = true;
-	if (!mftopen){ /*otprint("filetrans_do 错误！文件没打开！\r\n");*/return true; }
+	int32_t ret;
+	if (!mftopen){ /*otprint("filetrans_do 错误！文件没打开！\r\n");*/return 0; }
 	//int32_t count = _count; if (count > mbuflenw) count = mbuflenw;
 	//count = mft.read(mbufw, count);
 	//if (count > 0){ iocpbase::me()->send(mbufw, count, this); mioSize += count; mlastAct = time(NULL); }
@@ -216,6 +217,9 @@ int32_t cc::filetrans_do(const int32_t& _count){
 	//	mftopen = false; mft.close(); closesocket(true);
 	//}
 	//return count;
+	ret = mft.read(_count);
+	if (ret < 0) { mftopen = false; mft.close(); closesocket(true); };
+	return ret;
 }
 
 NS_XINY120_END

@@ -44,7 +44,7 @@ private:
 	speedlimit(){ speedmore = 0; };
 	std::recursive_mutex mmutex;
 	maplimit mlimit;
-	const int64_t mlimitmax = 1024 * 1024 * 8 / 8;
+	const int64_t mlimitmax = 1024 * 1024 * 8 / 8 * 100;
 };
 
 
@@ -54,7 +54,7 @@ public:
 	virtual bool init(){ return true; };
 	bool start(const int32_t& port);
 	bool send(const char* , const int32_t&, cc*);
-	bool file2iocp(HANDLE f,cc*);
+	//bool file2iocp(HANDLE f,cc*);
 	void printonlines();
 
 	virtual bool notifyconnection(cc*){ return true; };

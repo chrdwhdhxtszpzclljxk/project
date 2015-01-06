@@ -31,10 +31,12 @@ void iocpbase::threadfiletrans(){
 		{ cclock lock(cc::ccmutex); cccount = cc::cconlines.size(); }
 		if (cccount <= 0) { SleepEx(100, TRUE); continue; } // 在线人数为0，线程休息。
 		cur = GetTickCount();
-		if ((cur - last) >= 100){ // 距离上次不足100，跳过。
+		if ((cur - last) >= 1){ // 距离上次不足100，跳过。
 			cclock lock(cc::ccmutex);
 			for (iter = cc::cconlines.begin(); iter != cc::cconlines.end(); iter++){
 				if (!iter->second->mftopen){ iter->second->close(); continue; }
+				iter->second->filetrans_do(0);
+				/*
 				int64_t speed = speedlimit::me()->getspeed(iter->second->muserid) / 10;	int64_t speeded = 0;
 				if (iter->second->getios() < 10){
 					while (speed > 0 && (iter->second->getios() < 5)){
@@ -50,11 +52,12 @@ void iocpbase::threadfiletrans(){
 						speedmore -= out; //printf("%d - %d\r\n", int32_t(speedmore), int32_t(GetTickCount() - last));
 					}
 				} else	speedmore += speed; // 带宽太小，推数据时被阻塞，所以跳过发送并把带宽贡献给后面的高速用户。
+				*/
 			}
 			last = cur;
 		}
-		if (speedmore >= 1024 * 1024 * 3 / 2){ speedmore = 1024 * 1024 * 2 / 3; Sleep(10); }
-		Sleep(1);
+		if (speedmore >= 1024 * 1024 * 3 / 2){ speedmore = 1024 * 1024 * 2 / 3; SleepEx(10, TRUE); }
+		SleepEx(1, TRUE);
 	}
 }
 
@@ -116,7 +119,7 @@ bool iocpbase::ProcessIOMessage(LPOVERLAPPED pBuff, cc *pContext, uint32_t dwSiz
 	case optype::write2all: bRet = onwrite2all(pContext, dwSize, pBuff); iError = 3; break;
 	case optype::write:	bRet = onwrite(pContext, dwSize, pBuff); iError = 4; break;
 	case optype::disconnectex: bRet = ondisconnectex(pContext, dwSize, pBuff); iError = 5; break;
-	case optype::readfile: bRet = onreadfile(pContext, dwSize, pBuff); iError = 6; break;
+	//case optype::readfile: bRet = onreadfile(pContext, dwSize, pBuff); iError = 6; break;
 	default: pContext->merrno = 999; iError = 99; break;
 	}
 	return bRet;
@@ -293,7 +296,7 @@ void iocpbase::threadio(){
 	}
 	CoUninitialize();
 }
-
+/*
 bool iocpbase::file2iocp(HANDLE f, cc* pcc){
 	if (f != INVALID_HANDLE_VALUE){
 		//if (pcc->inc() > 0){
@@ -305,6 +308,7 @@ bool iocpbase::file2iocp(HANDLE f, cc* pcc){
 	}
 	return false;
 }
+*/
 
 bool iocpbase::AssociateIncomingClientWithContext(SOCKET clientSocket, in_addr& sa, int32_t& iLen){
 	if (mshutdown || (!maccept) || (clientSocket == INVALID_SOCKET)) return false;

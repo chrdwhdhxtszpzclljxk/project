@@ -14,10 +14,13 @@ void threadfiletrans(int sleep){
 		printf("WSAStartup failed with error %d\n", Result);
 		return;
 	}
-	char* url[] = {"GET /get.asp?key={32DCE648-9DF3-4EED-B0FB-0C811E6D108B} HTTP/1.1\r\n\r\n",
-		"GET /get.asp?key={BA0810A3-B71C-4302-A903-91E4CD37B44F} HTTP/1.1\r\n\r\n",
-		"GET /get.asp?key={79974700-F33F-4F84-8CFD-C797394A4814} HTTP/1.1\r\n\r\n"};
+	//char* url[] = {"GET /get.asp?key={32DCE648-9DF3-4EED-B0FB-0C811E6D108B} HTTP/1.1\r\n\r\n",
+	//	"GET /get.asp?key={BA0810A3-B71C-4302-A903-91E4CD37B44F} HTTP/1.1\r\n\r\n",
+	//	"GET /get.asp?key={79974700-F33F-4F84-8CFD-C797394A4814} HTTP/1.1\r\n\r\n"};
 
+	char* url[] = {"GET /get.asp?key={900504FD-B2A8-4ECB-89E4-E3AD6FC15453} HTTP/1.1\r\n\r\n",
+		"GET /get.asp?key={900504FD-B2A8-4ECB-89E4-E3AD6FC15453} HTTP/1.1\r\n\r\n",
+		"GET /get.asp?key={900504FD-B2A8-4ECB-89E4-E3AD6FC15453} HTTP/1.1\r\n\r\n"};
 
 
 	while (true){
@@ -51,10 +54,11 @@ void threadfiletrans(int sleep){
 		while (1){
 			if (recv(s, buffer, sizeof(buffer), 0) <= 0) break;
 			printf(".");
-			Sleep(sleep);
+			//Sleep(sleep);
 		}
 		printf("%d\r\n",GetLastError());
 		closesocket(s);
+		Sleep(1000);
 
 	}
 	WSACleanup();
@@ -70,11 +74,12 @@ int _tmain(int argc, _TCHAR* argv[]){
 	}
 
 	std::thread th[300];
-	threadfiletrans(200);
+	//threadfiletrans(200);
 
-	//for (int i = 0; i < 300; i++){
-	//	th[i] = std::thread(threadfiletrans,i);
-	//}
+	for (int i = 0; i < 300; i++){
+		Sleep(500);
+		th[i] = std::thread(threadfiletrans,i);
+	}
 
 	while (true){ getchar(); }
 
