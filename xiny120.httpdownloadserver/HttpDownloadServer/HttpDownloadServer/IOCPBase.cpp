@@ -57,7 +57,7 @@ void iocpbase::threadfiletrans(){
 			last = cur;
 		}
 		if (speedmore >= 1024 * 1024 * 3 / 2){ speedmore = 1024 * 1024 * 2 / 3; SleepEx(10, TRUE); }
-		SleepEx(1, TRUE);
+		SleepEx(10, TRUE);
 	}
 }
 

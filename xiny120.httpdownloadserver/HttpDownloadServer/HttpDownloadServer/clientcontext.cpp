@@ -60,6 +60,7 @@ int32_t cc::closesocket( bool bG){
 	int32_t ret = 0, dwError = 0;
 	if (bG && iocpbase::mDisConnectEx != NULL){
 		if (inc() > 0){
+			mft.close();
 			disconnectexbuf*  pOverlappedBuffer = new disconnectexbuf();
 			BOOL bRet = iocpbase::mDisConnectEx(msocket, pOverlappedBuffer, 0, 0);
 			if (bRet || ((dwError = WSAGetLastError()) == ERROR_IO_PENDING)){
