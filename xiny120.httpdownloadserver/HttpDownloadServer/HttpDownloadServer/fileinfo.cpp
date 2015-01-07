@@ -41,10 +41,10 @@ int32_t filetrans::read(char* buf, const int32_t& _len){
 int32_t filetrans::getsize(){ return filesize; }
 */
 
-filetrans::filetrans(cc* pcc) : f(INVALID_HANDLE_VALUE), filesize(0), end(-1), mpcc(pcc), mbuftotal(1024 * 15),mbytestotal(0),mcurtick(GetTickCount64()){
+filetrans::filetrans(cc* pcc) : f(INVALID_HANDLE_VALUE), filesize(0), end(-1), mpcc(pcc), mbuftotal(1024 * 15),mbytestotal(0),
+mcurtick(GetTickCount()){
 	mbuf = new char[mbuftotal];
-	cclock _l(mmutxpendding);
-	mpendding = false;
+	mpendding.clear();
 	Offset = OffsetHigh = 0;
 };
 
@@ -62,7 +62,7 @@ bool filetrans::open(const std::string& fn){
 
 void filetrans::close(){ 
 	if (f != INVALID_HANDLE_VALUE){
-		CancelIoEx(f, NULL);
+		//CancelIoEx(f, NULL);
 		CloseHandle(f); f = INVALID_HANDLE_VALUE;
 
 	}
@@ -77,8 +77,8 @@ int32_t filetrans::seek(const int32_t& pos){
 };
 
 int32_t filetrans::speedpush(const speedshot& ss){
-	cclock _l(mmutxpendding);
-	msq.push(ss); mbytestotal += ss.mbytes; mcurtick = GetTickCount64();
+	//cclock _l(mmutxpendding);
+	msq.push(ss); mbytestotal += ss.mbytes; mcurtick = GetTickCount();
 	while (mcurtick - (msq.front().mtick) > 1000){
 		mbytestotal -= msq.front().mbytes;
 		msq.pop();
@@ -87,10 +87,11 @@ int32_t filetrans::speedpush(const speedshot& ss){
 }
 
 int32_t filetrans::speed(){
-	cclock _l(mmutxpendding);
+	//cclock _l(mmutxpendding);
 	double span = 1;
 	if (msq.size() > 0){
-		span = (GetTickCount64() - msq.front().mtick) / 1000.0f;
+		span = (GetTickCount() - msq.front().mtick) / 1000.0f;
+		if (span < 0) span = 1;
 	}
 	return double(mbytestotal) / span;
 }
@@ -100,22 +101,26 @@ VOID CALLBACK filetrans::filereadRoutine(DWORD code, DWORD readed, LPOVERLAPPED 
 	if (code == 0 && readed > 0){
 		iocpbase::me()->send(pThis->mbuf, readed, pThis->mpcc);
 	}
-	cclock _l(pThis->mmutxpendding);
-	pThis->mpendding = false;
 	pThis->Offset += readed;
-	speedshot ss; ss.mbytes = readed; ss.mtick = GetTickCount64();
+	speedshot ss; ss.mbytes = readed; ss.mtick = GetTickCount();
 	pThis->speedpush(ss);
+	if (pThis->mpcc->dec() > 0)
+		pThis->mpendding.clear();
+	else
+		;// printf("小于0！小于0！小于0！小于0！小于0！\r\n");
 }
 
 int32_t filetrans::read(const int32_t& _len){
-	int32_t len = _len; BOOL status = FALSE; DWORD er;
+	int32_t len = _len, speednow = 0,speedlimit; BOOL status = FALSE; DWORD er;
 	if (len > mbuftotal) len = mbuftotal;
-	len = mbuftotal;
-	cclock _l(mmutxpendding);
-	if (mpendding) return 0;
-	if (speed() >= speedlimit::me()->getspeed(mpcc->muserid)) 
+	len = mbuftotal; speednow = speed(); speedlimit = speedlimit::me()->getspeed(mpcc->muserid);
+	if (speednow >= speedlimit){
 		return 0;
-
+	}
+	if (speednow > 0 && speednow <= speedlimit){
+		speedlimit::me()->speedmore += (speedlimit - speednow);
+	}
+	if (mpendding.test_and_set()) return 0;
 	if (f != INVALID_HANDLE_VALUE){
 		if (end != -1){ // range 指定了结束标记。
 			if (Offset >= end){ close(); return -1; } // 已经读取的字节大于等于range指定的字节，停止读取。
@@ -123,12 +128,15 @@ int32_t filetrans::read(const int32_t& _len){
 		}
 		DWORD lened = 0;
 		memset(mbuf, 0, len);
-		if ((status = ReadFileEx(f, mbuf, len,this, filereadRoutine)) == TRUE){ // 读取文件成功。直接发送。
-			mpendding = true;
-			return len;
+		if (mpcc->inc() > 0){
+			if ((status = ReadFileEx(f, mbuf, len, this, filereadRoutine)) == TRUE){ // 读取文件成功。直接发送。
+				return len;
+			}
+			else { if ((er = GetLastError()) == ERROR_HANDLE_EOF){ } }// 异步处理中...
+			if (mpcc->dec() == 0){ assert(0); return -1; }
 		}
-		else { if ((er = GetLastError()) == ERROR_HANDLE_EOF){ close(); } }// 异步处理中...
 	}
+	mpendding.clear();
 	return -1;
 }
 

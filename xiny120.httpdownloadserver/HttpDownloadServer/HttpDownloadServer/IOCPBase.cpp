@@ -34,26 +34,12 @@ void iocpbase::threadfiletrans(){
 		if ((cur - last) >= 1){ // 距离上次不足100，跳过。
 			cclock lock(cc::ccmutex);
 			for (iter = cc::cconlines.begin(); iter != cc::cconlines.end(); iter++){
+				if (iter->second->mlogin && (!iter->second->mftopen)) { iter->second->closesocket(false); continue; } // 如果成功打开文件过，但是现在关闭了。
 				if (!iter->second->mftopen){ iter->second->close(); continue; }
 				iter->second->filetrans_do(0);
-				/*
-				int64_t speed = speedlimit::me()->getspeed(iter->second->muserid) / 10;	int64_t speeded = 0;
-				if (iter->second->getios() < 10){
-					while (speed > 0 && (iter->second->getios() < 5)){
-						out = iter->second->filetrans_do(speed);
-						if (out == 0) break;
-						speeded += out; if (speeded >= speed) break;
-						speed -= out; //printf("%d - %d\r\n", int32_t(speed), int32_t(GetTickCount() - last));
-					}
-					while (speedmore > 0 && (iter->second->getios() < 3)){
-						out = iter->second->filetrans_do(speedmore);
-						if (out == 0) break;
-						speeded += out; if (speeded >= speed) break;
-						speedmore -= out; //printf("%d - %d\r\n", int32_t(speedmore), int32_t(GetTickCount() - last));
-					}
-				} else	speedmore += speed; // 带宽太小，推数据时被阻塞，所以跳过发送并把带宽贡献给后面的高速用户。
-				*/
+				//printf("..[%d]",int32_t(iter->second->ccid()));
 			}
+			
 			last = cur;
 		}
 		if (speedmore >= 1024 * 1024 * 3 / 2){ speedmore = 1024 * 1024 * 2 / 3; SleepEx(10, TRUE); }
@@ -397,6 +383,9 @@ void iocpbase::printonlines(){
 		ss << std::fixed << std::setprecision(2) << speed << "k/s][" << speedlimit::me()->getspeed(iter->second->muserid) << "]";
 		i++; ss >> line; ss.clear(); out.append(line).append("\r\n");
 	}
+	ss.clear();
+	ss << "在线数：" << cc::cconlines.size();
+	ss >> line; ss.clear(); out.append(line).append("\r\n");
 	printf(out.c_str());
 }
 

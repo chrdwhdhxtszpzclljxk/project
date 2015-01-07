@@ -21,7 +21,8 @@
 #pragma warning (default : 4146)
 #else
 #pragma warning (disable : 4146)
-#import "C:/Program Files (x86)/Common Files/System/ado/msado15.dll" \
+//#import "C:/Program Files (x86)/Common Files/System/ado/msado28.tlb" 
+#import "C:/Program Files (x86)/Common Files/System/ado/msado60_Backcompat_i386.tlb" \
         no_namespace \
         rename ("EOF", "adoEOF") \
         rename ("LockTypeEnum", "adoLockTypeEnum") \

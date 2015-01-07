@@ -11,26 +11,26 @@ NS_XINY120_BEGIN
 mapcc cc::cconlines;
 std::atomic<uint64_t> cc::__mccid = 0;
 std::recursive_mutex cc::ccmutex;
-cc::cc(SOCKET socket) : msocket(socket), mios(1), mbuflen(2048), /*mbuflenw(1024 * 32),mbufw(0),*/ mclosetime(-1),
-mftopen(false), mbuf(0), mtouchclose(false), mtotal(0), mtotalreset(0), mspeedLimit(1024 * 100), mspeedlimit(false), mft(this),
+cc::cc(SOCKET socket) : msocket(socket), mios(1), mbuflen(2048), mclosetime(-1), mlogin(false),
+mftopen(false), mbuf(0), mtotal(0), mtotalreset(0), mspeedLimit(1024 * 100), mspeedlimit(false), mft(this),
 haverequest(false), cr(false), crlf(false), mfirstAct(time(NULL)), mlastAct(mfirstAct + 1), mlastTick(0), mioSize(0), mccid(__mccid++){
+	//otprint("[%d] 上线\r\n", int32_t(mccid));
 }
 cc::~cc(){
 	if (mspeedlimit) speedlimit::me()->ccgone(muserid);
 	{cclock lock(ccmutex); cc::cconlines.erase(mccid); }
-	//closesocket(msocket);
-	//netbase->notifydisconnection(this);
-
+	close();
 	if (mbuf != 0) delete[] mbuf;
-	//if (mbufw != 0) delete[] mbufw;
+	//otprint("[%d] 离线\r\n",int32_t(mccid));
 };
 
 bool cc::init(){
-	mbuf = new char[mbuflen]; //mbufw = new char[mbuflenw];
+	mbuf = new char[mbuflen];
 	cclock lock(ccmutex); cconlines[mccid] = this;
 	return true;
 }
 
+/*
 int32_t cc::inc(){ 
 	if (mios > 0) 
 		mios++; 
@@ -40,18 +40,58 @@ int32_t cc::inc(){
 
 int32_t cc::dec(){
 	if (--mios <= 0){
-		//netbase->closesocket(this, true);
 		delete this;
-		//{cclock lock(ccmutex); ccdels.push_back(this); }
 		return 0;
 	}
 	return mios;
 }
-//void cc::touchclose(iocpbase* psvr){ mtouchclose = true; psvr->send("", 0, this);}
+
+
+int32_t cc::inc(){
+	if (mios > 0){
+		std::atomic_fetch_add(&mios, 1);
+	}
+	else { 
+		//otprint("inc fail.......................\r\n");
+		closesocket(false); }
+	return mios;
+};
+
+int32_t cc::dec(){
+	if (std::atomic_fetch_sub(&mios, 1) <= 1){
+		delete this;
+		return 0;
+	}
+	return mios;
+}
+*/
+
+int32_t cc::inc(){
+	cclock lock(ccmutex);
+	if (mios > 0){
+		mios++;
+	}
+	else {
+		//otprint("inc fail.......................\r\n");
+		closesocket(false);
+	}
+	return mios;
+};
+
+int32_t cc::dec(){
+	cclock lock(ccmutex);
+	mios--;
+	if (mios <= 0){
+		delete this;
+		return 0;
+	}
+	return mios;
+}
 
 bool cc::close() {
-	if (mclosetime <= 0){ if ((time(NULL) - mlastAct) > 60) { closesocket(false); return true; } }
-	else if ((time(NULL) - mclosetime) > 10) { closesocket(false); return true; }
+	if (mclosetime <= 0){ if ((time(NULL) - mlastAct) > 20) { closesocket(false); return true; } }
+//	else if ((time(NULL) - mclosetime) > 10) { closesocket(false); return true; }
+	//closesocket(false);
 	return false;
 };
 
@@ -134,6 +174,7 @@ bool cc::filetrans_push(){
 	mft.close(); std::string file; char buf[1024] = { 0 }; char filename[1024] = { 0 }; char ext[256] = { 0 }; const char* basepath = getbasepath();
 	int32_t userid = 0, i = 0, len = 0, cl, s, e; bool ret = false; mftopen = false; std::string txt, var, val, resstr = "HTTP/1.1 200 OK"; std::stringstream ss;
 	char cr[1024] = { 0 };
+	mlogin = false;
 	std::string key = varget("key"); if (!key.empty()){
 		file = db::me()->getfile(key, userid); if (!(file.empty() || userid == 0)){
 			muserid = userid; _splitpath(file.c_str(), NULL, NULL, filename, ext);
@@ -181,6 +222,7 @@ bool cc::filetrans_push(){
 				speedlimit::me()->cccame(muserid);
 				iocpbase::me()->send(buf, strlen(buf), this);
 				mftopen = true;
+				mlogin = true;
 				mlastTick = GetTickCount();
 				//otprint("[%d][%s]开始下载：%s\r\n",int32_t(muserid),key.c_str(),file.c_str());
 				return true;
@@ -206,18 +248,7 @@ bool cc::filetrans_push(){
 
 int32_t cc::filetrans_do(const int32_t& _count){
 	int32_t ret;
-	if (!mftopen){ /*otprint("filetrans_do 错误！文件没打开！\r\n");*/return 0; }
-	//int32_t count = _count; if (count > mbuflenw) count = mbuflenw;
-	//count = mft.read(mbufw, count);
-	//if (count > 0){ iocpbase::me()->send(mbufw, count, this); mioSize += count; mlastAct = time(NULL); }
-	//else if (count == 0){ // 发送全部文件完成！发送一个优雅关闭通知。并从发送列表中清除。
-	//	mftopen = false; mft.close();
-	//	closesocket(true);
-	//};
-	//if ((status = mft.read(mbufw, count,this)) == false){
-	//	mftopen = false; mft.close(); closesocket(true);
-	//}
-	//return count;
+	if (!mftopen){ return 0; }
 	ret = mft.read(_count);
 	if (ret < 0) { mftopen = false; mft.close(); closesocket(true); };
 	return ret;

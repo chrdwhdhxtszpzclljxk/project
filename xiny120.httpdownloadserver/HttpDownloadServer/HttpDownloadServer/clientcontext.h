@@ -54,12 +54,11 @@ public:
 public:
 	std::atomic<int64_t> mfirstAct, mlastAct, mioSize, mlastTick, mtotal, mtotalreset, mspeedLimit, muserid;
 	char* mbuf; int32_t mbuflen;
-	//char* mbufw; int32_t mbuflenw;
 	bool haverequest, cr, crlf;
 	static mapcc cconlines;
 	static std::recursive_mutex ccmutex;
 	DWORD merrno;
-	std::atomic<bool> mftopen, mtouchclose, mspeedlimit;
+	std::atomic<bool> mftopen, mspeedlimit, mlogin;
 private:
 	std::atomic<int32_t> mios;
 	static std::atomic<uint64_t> __mccid;

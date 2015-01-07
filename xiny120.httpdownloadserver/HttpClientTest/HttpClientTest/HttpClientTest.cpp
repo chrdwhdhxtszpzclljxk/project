@@ -51,9 +51,11 @@ void threadfiletrans(int sleep){
 		memset(buffer, 0, sizeof(buffer));
 		recv(s, buffer, sizeof(buffer), 0);
 		printf(buffer);
+		time_t now = time(NULL);
 		while (1){
 			if (recv(s, buffer, sizeof(buffer), 0) <= 0) break;
 			printf(".");
+			if ((time(NULL) - now) > sleep / 3) break;
 			//Sleep(sleep);
 		}
 		printf("%d\r\n",GetLastError());
@@ -78,7 +80,7 @@ int _tmain(int argc, _TCHAR* argv[]){
 
 	for (int i = 0; i < 300; i++){
 		Sleep(500);
-		th[i] = std::thread(threadfiletrans,i);
+		th[i] = std::thread(threadfiletrans,i + 10);
 	}
 
 	while (true){ getchar(); }

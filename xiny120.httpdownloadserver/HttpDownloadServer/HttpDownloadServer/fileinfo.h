@@ -63,7 +63,7 @@ private:
 	HANDLE f;
 	int32_t end, /*readed,*/ filesize;// , lastout; // 客户端分段下载时指定的结尾。 已经读取了多少。 总文件大小。
 	char* mbuf; int32_t mbuflen; const int32_t mbuftotal;
-	bool mpendding; std::recursive_mutex mmutxpendding;
+	std::atomic_flag mpendding;// std::recursive_mutex mmutxpendding;
 	int32_t mbytestotal; uint64_t mcurtick;
 	std::string path;
 	cc*	mpcc;

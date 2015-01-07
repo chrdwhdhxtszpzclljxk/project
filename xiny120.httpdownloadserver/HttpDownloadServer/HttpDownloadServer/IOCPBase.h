@@ -44,7 +44,7 @@ private:
 	speedlimit(){ speedmore = 0; };
 	std::recursive_mutex mmutex;
 	maplimit mlimit;
-	const int64_t mlimitmax = 1024 * 1024 * 8 / 8 * 100;
+	const int64_t mlimitmax = 1024 * 1024 * 8 / 8 * 2 / 3;
 };
 
 
