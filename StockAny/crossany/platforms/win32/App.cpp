@@ -8,7 +8,6 @@ NS_CROSSANY_BEGIN
 
 #define MAX_LOADSTRING 100
 #define _T(a) TEXT(a)
-App * App::sm_pSharedApp = NULL;
 
 // 全局变量: 
 static HINSTANCE hInst;								// 当前实例
@@ -24,16 +23,48 @@ HINSTANCE hInstance;    // 保存程序的实例
 bool keys[256];         // 用于键盘例程的数组  
 bool active = TRUE;       // 窗口的活动标志，缺省为TRUE  
 bool fullscreen = TRUE;   // 全屏标志缺省设定成全屏模式  
-LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);// WndProc的定义  
+LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);// WndProc的定义 
+
+#define NEAR_PLANE    1.0
+#define FAR_PLANE    200.0
+#define FIELD_OF_VIEW    60.0
 GLvoid ReSizeGLScene(GLsizei width, GLsizei height){// 重置并初始化GL窗口大小  
-	if (height == 0) height = 1;// 防止被零除 // 将Height设为1  
-	glMatrixMode(GL_PROJECTION);// 选择投影矩阵  
-	glLoadIdentity();// 重置投影矩阵  
-	//gluPerspective(45.0f, (GLfloat)width / (GLfloat)height, 0.1f, 100.0f);	// 计算窗口的外观比例  
-	gluOrtho2D(0, width, 0, height);
-	glViewport(0, 0, width, height);// 重置当前的视口(Viewport)  
-	glMatrixMode(GL_MODELVIEW);// 选择模型观察矩阵  
-	//glLoadIdentity();// 重置模型观察矩阵  
+
+	GLfloat    fAspectRatio;
+
+	if (height == 0)
+		height = 1;
+
+	// Set the new view port:
+	glViewport(0, 0, width, height);
+
+	// Setup the projection matrix:
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	fAspectRatio = ((GLfloat)width) / ((GLfloat)height);
+	gluPerspective(FIELD_OF_VIEW, fAspectRatio,
+		NEAR_PLANE, FAR_PLANE);
+
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
+
+	// Place the camera:
+	gluLookAt(0.0f, 0.0f, 80.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0);
+	//if (height == 0) height = 1;// 防止被零除 // 将Height设为1  
+	//glViewport(0, 0, width, height);// 重置当前的视口(Viewport)  
+	//glMatrixMode(GL_PROJECTION); //选择投影矩阵
+	//glLoadIdentity();   //重置投影矩阵
+
+	//计算窗口的比率
+	//gluPerspective(45.0f, (GLfloat)width / (GLfloat)height, 0.1f, 100.0f);
+	//glMatrixMode(GL_MODELVIEW); //选择模型视图矩阵
+	//glLoadIdentity();    //重设模型视图矩阵
+	////glMatrixMode(GL_PROJECTION);// 选择投影矩阵  
+	////glLoadIdentity();// 重置投影矩阵  
+	//////gluPerspective(45.0f, (GLfloat)width / (GLfloat)height, 0.1f, 100.0f);	// 计算窗口的外观比例  
+	////gluOrtho2D(0, width, 0, height);
+	////glMatrixMode(GL_MODELVIEW);// 选择模型观察矩阵  
+	//////glLoadIdentity();// 重置模型观察矩阵  
 }
 int InitGL(GLvoid){// 此处开始对OpenGL进行所有设置  
 	glShadeModel(GL_SMOOTH);// 启用阴影平滑  
@@ -45,15 +76,46 @@ int InitGL(GLvoid){// 此处开始对OpenGL进行所有设置
 	return TRUE;// 初始化 OK  
 }
 int DrawGLScene(GLvoid){// 从这里开始进行所有的绘制  
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);// 清除屏幕和深度缓存  
+	//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);// 清除屏幕和深度缓存  
 	//glLoadIdentity();// 重置当前的模型观察矩阵  
 	// 增加新的物体  
-	glColor4f(1.0f, 0.0f, 0.0f,0.5f);
-	uibase ui;
+	//glColor4f(1.0f, 0.0f, 0.0f,0.5f);
+	//uibase ui;
 	//ui.drawrc(20,20,200,200);
 	//ui.drawln(200, 200, 400, 400);
 	//ui.drawpt(300, 300);
-	ui.fillrc(20, 20, 300, 300);
+	//ui.fillrc(20, 20, 300, 300);
+	//GLfloat     rtri = 50;
+	//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); //清除颜色和深度缓存
+	///glLoadIdentity(); //重置模型视图矩阵
+	//glTranslatef(-1.5f, 0.0f, -6.0f); //向左移动1.5个单位，向屏幕里移动6.0个单位
+	//glRotatef(rtri, 0.0f, 1.0f, 0.0f);   // 沿y轴旋转三角形( 新加代码 )
+	//glBegin(GL_TRIANGLES);     //使用GL_TRIANGLES参数绘制三角形
+	//glColor3f(1.0f, 0.0f, 0.0f);  //设置颜色为红色
+	//glVertex3f(0.0f, 1.0f, 0.0f);// 从中点向上移动一个单位 (上顶点）
+	//我们已经把第一个顶点绘制在了屏幕上，并设置它的颜色为红色。在我们绘制第二个顶点之前，我们把颜色值改为绿色。这样三角形的左下顶点会被绘制成绿色。
+	//	glColor3f(0.0f, 1.0f, 0.0f); //设置颜色为绿色
+	//glVertex3f(-1.0f, -1.0f, 0.0f); //左下顶点
+	//然后我们绘制第三个也是最后一个顶点。在我们绘制之前，把颜色值改为蓝色。它是三角形的右下顶点。glEnd()函数执行之后，多边形将被填充。因为每个顶点的颜色不同，和只有一种固定颜色相比，颜色将会从每一个顶点扩散开来，然后杂中心汇合，所有的颜色混合在一起。这就是平滑着色。
+	//	glColor3f(0.0f, 0.0f, 1.0f);         //设置颜色为蓝色
+	//glVertex3f(1.0f, -1.0f, 0.0f);    // 右下顶点
+	//glEnd();  //绘制三角形完成
+
+	// Clear the screen.
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	// Draw the scene:
+	glBegin(GL_TRIANGLES);
+	glColor3f(1.0f, 0.0f, 0.0f);
+	glVertex3f(-25.0f, -25.0f, 0.0f);
+
+	glColor3f(0.0f, 1.0f, 0.0f);
+	glVertex3f(0.0f, 25.0f, 0.0f);
+
+	glColor3f(0.0f, 0.0f, 1.0f);
+	glVertex3f(25.0f, -25.0f, 0.0f);
+	glEnd();
+
 	OutputDebugString(_T("DrawGLScene %d\r\n"));// , frames);
 	return TRUE;// 一切OK  
 }
@@ -249,20 +311,19 @@ LRESULT CALLBACK WndProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam) {     
 }
 
 
-App* App::me() { 
-	if (sm_pSharedApp == NULL) {
-		sm_pSharedApp = new App();
-		if (sm_pSharedApp != NULL) return sm_pSharedApp;
+App* App::me() {
+	static App* _app = NULL;
+	if (_app == NULL) {
+		_app = new App();
+		if (!_app->init()){ delete _app; _app = NULL; }
 	}
-	return sm_pSharedApp;
+	return _app;
 }
-App::App(){
-	//CA_ASSERT(!sm_pSharedApp); sm_pSharedApp = this;
-}
-App::~App() {}// { CA_ASSERT(this == sm_pSharedApp); sm_pSharedApp = NULLPTR; }
+App::App(){}
+App::~App(){}
 
 int App::run() {
-	MSG msg; BOOL done = FALSE;     // 用来退出循环的Bool 变量  
+	MSG msg; BOOL done = FALSE; // 用来退出循环的Bool 变量  
 	// 提示用户选择运行模式  
 	//if (MessageBox(NULL, _T("Would You Like To Run In Fullscreen Mode?"), _T("Start FullScreen?"), MB_YESNO | MB_ICONQUESTION) == IDNO)
 		fullscreen = FALSE; // 窗口模式  

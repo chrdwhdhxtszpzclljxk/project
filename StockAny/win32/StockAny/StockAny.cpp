@@ -26,6 +26,8 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 	UNREFERENCED_PARAMETER(hPrevInstance);
 	UNREFERENCED_PARAMETER(lpCmdLine);
 
+	//http://www.codeproject.com/Articles/15419/GLFW-A-Simple-OpenGL-Framework-Library
+
 	crossany::App::me()->hInst = hInstance;
 	return crossany::App::me()->run();
 

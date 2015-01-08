@@ -16,7 +16,8 @@ public:
 	//appbase();
 	virtual ~appbase() {};
 
-	virtual bool dolaunching() = 0;
+	virtual bool oninit() = 0;
+	virtual void onexit() = 0;
 	virtual void lostfocus() = 0;
 	virtual void getfocus() = 0;
 	virtual void initGLContextAttrs() {};

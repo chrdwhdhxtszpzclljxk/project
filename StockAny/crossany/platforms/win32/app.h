@@ -9,6 +9,7 @@ NS_CROSSANY_BEGIN
 class App : public appbase{
 public:
 	static App* me();
+	virtual bool init(){ return true; };
 	virtual int run();
 	HINSTANCE hInst;
 protected:
@@ -16,13 +17,13 @@ protected:
 	~App();
 protected:
 
-	virtual bool dolaunching() { return true; };
+	virtual bool oninit() { return true; };
+	virtual void onexit(){}
 	virtual void lostfocus() {};
 	virtual void getfocus() {};
 	virtual void initGLContextAttrs() {};
 	virtual Platform getCurrentPlatform() { return Platform::OS_WINDOWS; };
-protected:
-	static App * sm_pSharedApp;
+
 };
 
 NS_CROSSANY_END
