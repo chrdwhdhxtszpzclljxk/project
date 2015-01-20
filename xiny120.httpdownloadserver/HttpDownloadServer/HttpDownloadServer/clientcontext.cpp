@@ -19,7 +19,7 @@ haverequest(false), cr(false), crlf(false), mfirstAct(time(NULL)), mlastAct(mfir
 cc::~cc(){
 	if (mspeedlimit) speedlimit::me()->ccgone(muserid);
 	{cclock lock(ccmutex); cc::cconlines.erase(mccid); }
-	close();
+	::closesocket(msocket);
 	if (mbuf != 0) delete[] mbuf;
 	//otprint("[%d] ¿Îœﬂ\r\n",int32_t(mccid));
 };
